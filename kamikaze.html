@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+    <head>
+		<meta charset="utf-8">
+		<style>
+		#canvas-id {
+			margin: 0;
+			padding: 0;
+			cursor:crosshair;
+		}
+		body{
+			background-color:black;
+			overflow:hidden;
+			margin:0;
+		}
+		</style>
+        
+    </head>
+    <body>
+        <canvas id="canvas-id" ></canvas>
+    </body>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+	var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+			window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+	var canvas = document.getElementById("canvas-id");
+	var socket = io('http://172.16.209.145');
+	canvas.width = innerWidth;
+	canvas.height = innerHeight;
+	var context = canvas.getContext("2d");
+	
+	var arena={width:3000,height:3000};
+	
+	var players;
+	var bullets;
+	
+	var particles =[];
+	var shadows=[];
+	var camera={x:arena.width/2,y:arena.height/2};
+	
+	var id;
+	var myid;
+	var gameover=false;
+	var timer=0;
+	var keyA=false,keyS=false,keyD=false,keyW=false;
+	
+	function shadow(x,y,size,color){
+	this.x = x;
+	this.y = y;
+	this.size = size;
+	this.color = color;
+	this.alpha = 1;
+	}
+	
+	function searchid(id){
+		var a=0;
+		for (a;a<players.length;a++){
+			if (players[a].id == id)break;
+		}
+		return a;
+	}
+	socket.on("hello",function (args){
+		players = args.players;
+		bullets = args.bullets;
+		id = args.id;
+		myid = searchid(id);
+		camera.x = players[myid].x-canvas.width/2;
+		camera.y = players[myid].y-canvas.height/2;
+		console.log("Connected to Server!")
+	});
+	
+	socket.on("update",function(args){
+		players = args.players;
+		bullets = args.bullets;
+		myid = searchid(id);
+	});
+	
+	socket.on("playerkilled",function(args){
+		kid = searchid(args);
+		boom(players[kid].x,players[kid].y,players[kid].color);
+		players[kid].ingame=false;
+		if (args == id){
+			gameover=true;
+		}else{
+		myid = searchid(id);
+		}
+	});
+	
+	function dist(x,y){
+	return Math.sqrt(x*x+y*y);
+	}
+	
+	function boom(x,y,cl){
+	var ww=Math.floor(Math.random()*10+10);
+		for (var a =0;a<ww;a++){
+		explode(x,y,cl);
+
+		}
+	}
+	function fire(x,y){
+		bulletsFired++;
+		var dx=player.x-x;
+		var dy=player.y-y;
+		
+		var angle=Math.atan2(dx,dy);
+		var ax = -Math.sin(angle);
+		var ay = -Math.cos(angle);
+		
+		var color;
+		color= players[myid].color;
+		bullets.push({
+			life:100,
+			x:player.x,
+			y:player.y,
+			ax:ax*6,
+			ay:ay*6,
+			color:color,
+		});
+	}
+	function explode(x,y,cl){
+		particles.push({
+		x:x,
+		y:y,
+		color:cl,
+		size:Math.random()*10+5,
+		ax:(Math.random()*4-2),
+		ay:(Math.random()*4-2),
+		life:Math.random()*0.5+0.5
+		});
+	}
+
+	window.addEventListener("keydown", function (args) {
+		t=args.keyCode;
+		if (t == 65 && !players[myid].keyA){socket.emit("keyAdown");keyA = true;}
+		else if (t == 68 && !players[myid].keyD){socket.emit("keyDdown");keyD = true;}
+		else if (t == 83 && !players[myid].keyS){socket.emit("keySdown");keyS = true;}
+		else if (t == 87 && !players[myid].keyW){socket.emit("keyWdown");keyW = true;}
+		
+		if (t == 70 && gameover){
+			socket.emit("respawn");
+		}
+		//console.log(t);
+	}, false);
+	window.addEventListener("keyup", function (args) {
+		t=args.keyCode;
+		if (t == 65 && players[myid].keyA){socket.emit("keyAup");keyA = false;}
+		else if (t == 68 && players[myid].keyD){socket.emit("keyDup");keyD = false;}
+		else if (t == 83 && players[myid].keyS){socket.emit("keySup");keyS = false;}
+		else if (t == 87 && players[myid].keyW){socket.emit("keyWup");keyW = false;}
+	}, false);
+
+	window.addEventListener("mousedown", function (args) {
+		if (players[myid].cooldown==0)
+			socket.emit("fire",Math.atan2((players[myid].y-camera.y-args.layerY),(players[myid].x-camera.x-args.layerX)));
+	}, false);
+	
+	///UPDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIIIIIIIIIIIIIIIT
+	
+	function update() {
+		if (typeof players != "undefined" && !gameover){//camera
+			
+			if (players[myid].keyA != keyA && !keyA){socket.emit("keyAup");}
+			if (players[myid].keyS != keyS && !keyS){socket.emit("keySup");}
+			if (players[myid].keyD != keyD && !keyD){socket.emit("keyDup");}
+			if (players[myid].keyW != keyW && !keyW){socket.emit("keyWup");}
+			
+			if (players[myid].x<canvas.width/2 ){
+				camera.x =0;
+			}
+			else if (players[myid].x>arena.width-canvas.width/2){
+				camera.x = arena.width-canvas.width;
+			}
+			else {
+				camera.x = players[myid].x-canvas.width/2;
+			}
+			if (players[myid].y<canvas.height/2){
+				camera.y = 0;
+			}
+			else if(players[myid].y>arena.height-canvas.height/2){
+				camera.y = arena.height-canvas.height;
+			}
+			else{
+				camera.y = players[myid].y-canvas.height/2;
+			}
+		}
+	
+		if (typeof players != "undefined"){
+		for (var a =0;a<players.length;a++){//player
+			if (!players[a].ingame)continue;
+		
+			if (players[a].x+10>arena.width){players[a].x=arena.width-10;players[a].ax*=-1;}
+			if (players[a].x-10<0){players[a].x=10;players[a].ax*=-1;}
+			
+			if (players[a].y+10>arena.height){players[a].y=arena.height-10;players[a].ay*=-1;}
+			if (players[a].y-10<0){players[a].y=10;players[a].ay*=-1;}
+			
+			players[a].ax*=0.95;
+			players[a].ay*=0.95;
+			
+			players[a].x+=players[a].ax;
+			players[a].y+=players[a].ay;
+			
+			if(timer %5 == 0){shadows.push(new shadow(players[a].x,players[a].y,players[a].size,players[a].color));
+			}
+			
+			
+		}
+		if (players[searchid(id)].ingame){gameover = false;}
+		}
+		if (typeof bullets != "undefined")
+		for (var a=0;a<bullets.length;a++){//bullets
+			bullets[a].x+=bullets[a].ax;
+			bullets[a].y+=bullets[a].ay;
+			bullets[a].life--;
+			
+			if(bullets[a].x>arena.width || bullets[a].x<0 || bullets[a].y<0 || bullets[a].y>arena.height || bullets[a].life<0)
+				bullets.splice(a,1);
+			else if(timer %3 == 0){shadows.push(new shadow(bullets[a].x,bullets[a].y,bullets[a].size,bullets[a].color));}
+			
+		}
+		for (var a=0;a<particles.length;a++){//particles
+			particles[a].life-=0.01;
+			if (particles[a].life<=0){particles.splice(a,1);continue;}
+			particles[a].x+=particles[a].ax*particles[a].life;
+			particles[a].y+=particles[a].ay*particles[a].life;
+		}
+		for (var a =0;a<shadows.length;a++){ // Shadows
+			shadows[a].alpha -= 0.02;
+			if (shadows[a].alpha<0){shadows.splice(a,1);}
+		}
+		timer ++;
+		if (timer==100)timer = 0;
+		setTimeout(update, 10);
+	}
+	
+     ///DRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW
+	
+	function draw() {
+		context.clearRect(0,0,canvas.width,canvas.height);
+		
+		if (typeof myid != "undefined"){//KDA
+			var text = players[myid].kills + "/" +players[myid].deaths +"/"+players[myid].assists;//KDA
+			context.textAlign = 'center';
+			context.font = ""+canvas.width*0.02+"px Courier New";
+			context.fillStyle="#FFF"
+			context.fillText(text,canvas.width*0.5,canvas.height*0.1);
+		}
+		
+		if (gameover){ // Press F to try again
+			context.font = ""+canvas.width*0.05+"px Courier New";
+			context.fillStyle="#FFF"
+			context.fillText("GAME OVER",canvas.width*0.5,canvas.height*0.5);
+			
+			context.font = ""+canvas.width*0.02+"px Courier New";
+			context.fillStyle="rgba(200,200,200,0.5)";
+			context.fillText("press F to try again",canvas.width*0.5,canvas.height*0.6);
+		}
+		
+		if (typeof players != "undefined" && players[myid].life>0){//LIFE BAR
+			context.fillStyle="#F33";
+			context.fillRect(50,20,(canvas.width-100)*(players[myid].life/100),10);
+		}
+		
+		if (typeof players != "undefined"){//players
+		
+			for (var a=0;a<players.length;a++){
+				if (!players[a].ingame)continue;
+				context.fillStyle = players[a].color;
+				//context.fillStyle = "#FF0";
+				context.globalAlpha = 1;
+				context.beginPath();
+				context.arc(players[a].x-camera.x,players[a].y-camera.y,10,0,2*Math.PI);
+				context.fill();
+			}
+		}
+		if (typeof bullets != "undefined") // Bullets
+			for (var a=0;a<bullets.length;a++){
+				context.fillStyle = bullets[a].color;
+				context.beginPath();
+				context.globalAlpha = 1;
+				context.arc(bullets[a].x-camera.x,bullets[a].y-camera.y,5,0,2*Math.PI);
+				context.fill();
+			}
+		
+		for (var a=0;a<particles.length;a++){ // particles
+			context.globalAlpha = particles[a].life;
+			context.fillStyle = particles[a].color;
+			context.beginPath();
+			context.arc(particles[a].x-camera.x,particles[a].y-camera.y,particles[a].size,0,2*Math.PI);
+			context.fill();
+		}
+		for (var a=0;a<shadows.length;a++){
+			context.globalAlpha = shadows[a].alpha;
+			context.fillStyle = shadows[a].color;
+			context.beginPath();
+			context.arc(shadows[a].x-camera.x,shadows[a].y-camera.y,shadows[a].size,0,2*Math.PI);
+			context.fill();
+		}
+		context.globalAlpha = 1;
+	requestAnimationFrame(draw);
+	}
+	update();
+	draw();
+	</script>
+</html>
